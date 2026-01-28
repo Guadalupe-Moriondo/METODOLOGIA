@@ -1,43 +1,103 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-
 import { Order } from './entities/order.entity';
+import { Restaurant } from '../restaurants/entities/restaurant.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { OrderStatus } from './order-status.enum';
+import { UserRole } from '../users/user-role.enum';
+import { AddOrderItemDto } from './dto/add-order-item.dto';
+import { OrderItem } from './entities/order-item.entity';
 
 @Injectable()
 export class OrdersService {
   constructor(
     @InjectRepository(Order)
     private readonly orderRepository: Repository<Order>,
+
+    @InjectRepository(Restaurant)
+    private readonly restaurantRepository: Repository<Restaurant>,
+
+    @InjectRepository(OrderItem)
+    private readonly orderItemRepo: Repository<OrderItem>,
   ) {}
 
-  // 🧑 USER → crear pedido
-  async create(createOrderDto: CreateOrderDto) {
+  // =========================
+  // 🧑 USER → CREAR PEDIDO
+  // =========================
+  async create(dto: CreateOrderDto, userId: number) {
+    const restaurant = await this.restaurantRepository.findOne({
+      where: { id: dto.restaurantId },
+      relations: ['owner'],
+    });
+
+    if (!restaurant) {
+      throw new NotFoundException('Restaurant not found');
+    }
+
     const order = this.orderRepository.create({
-      total: createOrderDto.total,
+      total: 0,
       status: OrderStatus.PENDING,
-      user: { id: createOrderDto.userId },
-      restaurant: { id: createOrderDto.restaurantId },
+      user: { id: userId },
+      restaurant: { id: restaurant.id },
+      vendor: { id: restaurant.owner.id },
     });
 
     return this.orderRepository.save(order);
   }
 
-  // 📋 ADMIN / USER → ver pedidos
-  async findAll() {
-    return this.orderRepository.find({
-      relations: ['user', 'restaurant', 'driver'],
-    });
+  // =========================
+  // 📋 LISTAR PEDIDOS POR ROL
+  // =========================
+  async findAllByRole(user: { userId: number; role: UserRole }) {
+    // 👑 ADMIN
+    if (user.role === UserRole.ADMIN) {
+      return this.orderRepository.find({
+        relations: ['user', 'restaurant', 'vendor', 'driver','items',
+  'items.product'],
+      });
+    }
+
+    // 👤 USER
+    if (user.role === UserRole.USER) {
+      return this.orderRepository.find({
+        where: { user: { id: user.userId } },
+        relations: ['restaurant', 'driver', 'vendor'],
+      });
+    }
+
+    // 🏪 VENDOR
+    if (user.role === UserRole.VENDOR) {
+      return this.orderRepository.find({
+        where: { vendor: { id: user.userId } },
+        relations: ['user', 'restaurant', 'driver'],
+      });
+    }
+
+    // 🛵 DRIVER
+    if (user.role === UserRole.DRIVER) {
+      return this.orderRepository.find({
+        where: { driver: { id: user.userId } },
+        relations: ['user', 'restaurant', 'vendor'],
+      });
+    }
+
+    return [];
   }
 
-  // 🔍 ver pedido por ID
+  // =========================
+  // 🔍 OBTENER PEDIDO
+  // =========================
   async findOne(id: number) {
     const order = await this.orderRepository.findOne({
       where: { id },
-      relations: ['user', 'restaurant', 'driver'],
+      relations: ['user', 'restaurant', 'vendor', 'driver','items',
+      'items.product'],
     });
 
     if (!order) {
@@ -47,73 +107,139 @@ export class OrdersService {
     return order;
   }
 
+  // =========================
+  // ✏️ UPDATE SIMPLE
+  // =========================
   async update(id: number, dto: UpdateOrderDto) {
-  const order = await this.orderRepository.findOne({ where: { id } });
-  if (!order) throw new NotFoundException('Order not found');
+    const order = await this.findOne(id);
+    return this.orderRepository.save(order);
+  }
 
-  if (dto.total !== undefined) order.total = dto.total;
+  // =========================
+  // ❌ DELETE
+  // =========================
+  async remove(id: number) {
+    const order = await this.findOne(id);
+    await this.orderRepository.remove(order);
+    return { message: `Order ${id} deleted successfully` };
+  }
 
-  return this.orderRepository.save(order);
-}
-
-async remove(id: number) {
-  const order = await this.orderRepository.findOne({ where: { id } });
-  if (!order) throw new NotFoundException('Order not found');
-
-  await this.orderRepository.remove(order);
-  return { message: `Order ${id} deleted successfully` };
-}
-
-
-  // 🔄 VENDOR / DRIVER → cambiar estado
+  // =========================
+  // 🔄 CAMBIAR ESTADO
+  // =========================
   async updateStatus(
-  id: number,
-  dto: UpdateOrderDto,
-  role: string,
-) {
+    id: number,
+    dto: UpdateOrderDto,
+    user: { userId: number; role: UserRole },
+  ) {
+    const order = await this.findOne(id);
+
+    if (!dto.status) {
+      throw new BadRequestException('Status is required');
+    }
+
+    // 🏪 VENDOR
+    if (user.role === UserRole.VENDOR) {
+      const allowed = [
+        OrderStatus.ACCEPTED,
+        OrderStatus.PREPARING,
+        OrderStatus.READY,
+      ];
+
+      if (!allowed.includes(dto.status)) {
+        throw new BadRequestException(
+          'Vendor cannot set this order status',
+        );
+      }
+    }
+
+    // 🛵 DRIVER
+    if (user.role === UserRole.DRIVER) {
+      const allowed = [
+        OrderStatus.ON_THE_WAY,
+        OrderStatus.DELIVERED,
+      ];
+
+      if (!allowed.includes(dto.status)) {
+        throw new BadRequestException(
+          'Driver cannot set this order status',
+        );
+      }
+
+      // se autoasigna
+      order.driver = { id: user.userId } as any;
+    }
+
+    order.status = dto.status;
+    return this.orderRepository.save(order);
+  }
+
+async addItem(orderId: number, dto: AddOrderItemDto) {
   const order = await this.orderRepository.findOne({
-    where: { id },
+    where: { id: orderId },
+    relations: ['items'],
   });
 
-  if (!order) {
-    throw new NotFoundException('Order not found');
+  if (!order) throw new NotFoundException('Order not found');
+
+  if (order.status !== OrderStatus.PENDING) {
+    throw new BadRequestException(
+      'Order can no longer be modified',
+    );
   }
 
-  if (role === 'VENDOR') {
-    const allowed = [
-      OrderStatus.ACCEPTED,
-      OrderStatus.PREPARING,
-      OrderStatus.READY,
-    ];
+  const item = this.orderItemRepo.create({
+    order: { id: orderId },
+    product: { id: dto.productId },
+    quantity: dto.quantity,
+    price: 100, // luego desde product
+  });
 
-    if (!allowed.includes(dto.status)) {
-      throw new BadRequestException(
-        'Vendor cannot set this order status',
-      );
-    }
+  await this.orderItemRepo.save(item);
+  await this.recalculateTotal(orderId);
+
+  return item;
+}
+
+
+
+private async recalculateTotal(orderId: number) {
+  const items = await this.orderItemRepo.find({
+    where: { order: { id: orderId } },
+  });
+
+  const total = items.reduce(
+    (sum, item) => sum + Number(item.price) * item.quantity,
+    0,
+  );
+
+  await this.orderRepository.update(orderId, { total });
+}
+
+async removeItem(orderId: number, itemId: number) {
+  const item = await this.orderItemRepo.findOne({
+    where: {
+      id: itemId,
+      order: { id: orderId },
+    },
+    relations: ['order'],
+  });
+
+  if (!item) {
+    throw new NotFoundException('Item not found');
   }
 
-  if (role === 'DRIVER') {
-    const allowed = [
-      OrderStatus.ON_THE_WAY,
-      OrderStatus.DELIVERED,
-    ];
-
-    if (!allowed.includes(dto.status)) {
-      throw new BadRequestException(
-        'Driver cannot set this order status',
-      );
-    }
-
-    if (dto.driverId) {
-      order.driver = { id: dto.driverId } as any;
-    }
+  if (item.order.status !== OrderStatus.PENDING) {
+    throw new BadRequestException(
+      'Order can no longer be modified',
+    );
   }
 
-  order.status = dto.status;
-  return this.orderRepository.save(order);
+  await this.orderItemRepo.remove(item);
+  await this.recalculateTotal(orderId);
+
+  return { message: 'Item removed successfully' };
+}
 
 
-}}
-
-
+}

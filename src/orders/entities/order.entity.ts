@@ -2,7 +2,8 @@ import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 't
 import { User } from '../../users/entities/user.entity';
 import { Restaurant } from '../../restaurants/entities/restaurant.entity';      
 import { OrderStatus } from '../order-status.enum';  
-
+import { OrderItem } from './order-item.entity';
+import { OneToMany } from 'typeorm';
 @Entity()
 export class Order {
   @PrimaryGeneratedColumn()
@@ -30,5 +31,12 @@ export class Order {
   @JoinColumn({ name: 'driver_id' })
   driver: User;
 
+  @ManyToOne(() => User)
+  @JoinColumn({ name: 'vendor_id' })
+  vendor: User;
+
+  
+  @OneToMany(() => OrderItem, item => item.order)
+  items: OrderItem[];
    
 }

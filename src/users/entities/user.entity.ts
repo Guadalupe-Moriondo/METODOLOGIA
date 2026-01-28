@@ -8,6 +8,8 @@ import { UserRole } from '../user-role.enum';
 import { Review } from '../../reviews/entities/review.entity';
 import { Order } from '../../orders/entities/order.entity';
 import { Address } from '../../addresses/entities/address.entity';
+
+
 @Entity()
 export class User {
   @PrimaryGeneratedColumn()

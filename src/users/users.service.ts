@@ -16,10 +16,17 @@ export class UsersService {
     private readonly jwtService: JwtService,
   ) {}
 
-  create(dto: CreateUserDto) {
-    const user = this.userRepo.create(dto);
-    return this.userRepo.save(user);
-  }
+  async create(dto: CreateUserDto) {
+  const hashedPassword = await bcrypt.hash(dto.password, 10);
+
+  const user = this.userRepo.create({
+    ...dto,
+    password: hashedPassword,
+  });
+
+  return this.userRepo.save(user);
+}
+
 
   findAll() {
     return this.userRepo.find();
@@ -63,7 +70,17 @@ export class UsersService {
     return { message: 'User deleted' };
   }
 
-  async login(email: string, password: string) {
+  async findMe(userId: number) {
+  return this.findOne(userId);
+}
+
+async updateMe(userId: number, dto: UpdateUserDto) {
+  const user = await this.findOne(userId);
+  Object.assign(user, dto);
+  return this.userRepo.save(user);
+}
+
+async login(email: string, password: string) {
   const user = await this.userRepo.findOne({
     where: { email },
   });
