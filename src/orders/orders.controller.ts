@@ -6,6 +6,7 @@ import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/roles.guard';
 import { CurrentUser } from '../users/current-user.decorator';
+import { AddOrderItemDto } from './dto/add-order-item.dto';
 
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -18,12 +19,14 @@ create(
   @Body() dto: CreateOrderDto,
   @CurrentUser() user: any,) {
   return this.ordersService.create(dto, user.userId);
-}
-
-  @Get()
-  findAll() {
-    return this.ordersService.findAll();
   }
+
+  @UseGuards(JwtAuthGuard)
+  @Get()
+  findAll(@CurrentUser() user: any) {
+  return this.ordersService.findAllByRole(user);
+  }
+
 
   @Get(':id')
   findOne(@Param('id') id: string) {
@@ -50,6 +53,21 @@ create(
   remove(@Param('id') id: string) {
     return this.ordersService.remove(+id);
   }
+
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/items')
+  addItem(
+  @Param('id') orderId: string,
+  @Body() dto: AddOrderItemDto,) {
+  return this.ordersService.addItem(+orderId, dto);
+}
+
+@Delete(':id/items/:itemId')
+removeItem(
+  @Param('id') orderId: string,
+  @Param('itemId') itemId: string,) {
+  return this.ordersService.removeItem(+orderId, +itemId);
+}
 
   
 }

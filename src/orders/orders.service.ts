@@ -13,6 +13,7 @@ import { OrderStatus } from './order-status.enum';
 import { UserRole } from '../users/user-role.enum';
 import { AddOrderItemDto } from './dto/add-order-item.dto';
 import { OrderItem } from './entities/order-item.entity';
+import { Product } from '../products/entities/product.entity';
 
 @Injectable()
 export class OrdersService {
@@ -25,6 +26,9 @@ export class OrdersService {
 
     @InjectRepository(OrderItem)
     private readonly orderItemRepo: Repository<OrderItem>,
+
+    @InjectRepository(Product) 
+    private readonly productRepo: Repository<Product>,
   ) {}
 
   // =========================
@@ -177,44 +181,39 @@ export class OrdersService {
 async addItem(orderId: number, dto: AddOrderItemDto) {
   const order = await this.orderRepository.findOne({
     where: { id: orderId },
-    relations: ['items'],
   });
 
-  if (!order) throw new NotFoundException('Order not found');
+  if (!order) {
+    throw new NotFoundException('Order not found');
+  }
 
-  if (order.status !== OrderStatus.PENDING) {
-    throw new BadRequestException(
-      'Order can no longer be modified',
-    );
+  // 🔍 buscar producto real
+  const product = await this.productRepo.findOne({
+    where: {
+      id: dto.productId,
+      isActive: true,
+    },
+  });
+
+  if (!product) {
+    throw new NotFoundException('Product not available');
   }
 
   const item = this.orderItemRepo.create({
     order: { id: orderId },
-    product: { id: dto.productId },
+    product: { id: product.id },
     quantity: dto.quantity,
-    price: 100, // luego desde product
+    price: product.price, // ✅ PRECIO REAL
   });
 
   await this.orderItemRepo.save(item);
+
+  // 🔄 recalcular total
   await this.recalculateTotal(orderId);
 
   return item;
 }
 
-
-
-private async recalculateTotal(orderId: number) {
-  const items = await this.orderItemRepo.find({
-    where: { order: { id: orderId } },
-  });
-
-  const total = items.reduce(
-    (sum, item) => sum + Number(item.price) * item.quantity,
-    0,
-  );
-
-  await this.orderRepository.update(orderId, { total });
-}
 
 async removeItem(orderId: number, itemId: number) {
   const item = await this.orderItemRepo.findOne({
@@ -241,5 +240,16 @@ async removeItem(orderId: number, itemId: number) {
   return { message: 'Item removed successfully' };
 }
 
+private async recalculateTotal(orderId: number) {
+  const items = await this.orderItemRepo.find({
+    where: { order: { id: orderId } },
+  });
 
+  const total = items.reduce(
+    (sum, item) => sum + Number(item.price) * item.quantity,
+    0,
+  );
+
+  await this.orderRepository.update(orderId, { total });
+}
 }

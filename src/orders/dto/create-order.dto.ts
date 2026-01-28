@@ -7,6 +7,4 @@ export class CreateOrderDto {
   @IsNumber()
   restaurantId: number;
 
-  @IsNumber()
-  total: number;
 }

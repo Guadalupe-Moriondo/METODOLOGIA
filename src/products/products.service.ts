@@ -80,4 +80,15 @@ export class ProductsService {
     await this.productRepo.remove(product);
     return { message: 'Product deleted' };
   }
+
+  findByRestaurant(restaurantId: number) {
+  return this.productRepo.find({
+    where: {
+      restaurant: { id: restaurantId },
+      isActive: true,
+    },
+  });
+}
+
+
 }
