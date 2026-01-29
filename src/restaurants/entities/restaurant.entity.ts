@@ -43,8 +43,9 @@ export class Restaurant {
   @OneToMany(() => Review, (review) => review.restaurant)
   reviews: Review[];
 
-  @ManyToOne(() => User)
+  @ManyToOne(() => User, { nullable: false })
   @JoinColumn({ name: 'owner_id' })
   owner: User;
+
   
 }

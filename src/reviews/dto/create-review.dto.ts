@@ -1,8 +1,6 @@
 import { IsString, IsNumber, Min, Max, IsOptional } from 'class-validator';
 
 export class CreateReviewDto {
-  @IsNumber()
-  userId: number;
 
   @IsNumber()
   restaurantId: number;

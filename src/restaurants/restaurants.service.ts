@@ -13,10 +13,15 @@ export class RestaurantsService {
     private readonly restaurantRepo: Repository<Restaurant>,
   ) {}
 
-  create(dto: CreateRestaurantDto) {
-    const restaurant = this.restaurantRepo.create(dto);
-    return this.restaurantRepo.save(restaurant);
+  create(dto: CreateRestaurantDto, ownerId: number) {
+  const restaurant = this.restaurantRepo.create({
+    ...dto,
+    owner: { id: ownerId },
+  });
+
+  return this.restaurantRepo.save(restaurant);
   }
+
 
   findAll(search?: string) {
     if (search) {

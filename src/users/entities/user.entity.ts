@@ -1,14 +1,8 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  OneToMany,
-} from 'typeorm';
+import {Entity,PrimaryGeneratedColumn,Column,OneToMany,} from 'typeorm';
 import { UserRole } from '../user-role.enum';
 import { Review } from '../../reviews/entities/review.entity';
 import { Order } from '../../orders/entities/order.entity';
 import { Address } from '../../addresses/entities/address.entity';
-
 
 @Entity()
 export class User {
@@ -18,10 +12,11 @@ export class User {
   @Column()
   name: string;
 
+
   @Column({ unique: true })
   email: string;
 
-  @Column()
+  @Column({ select: false })
   password: string;
 
   @Column({
@@ -33,6 +28,9 @@ export class User {
 
   @OneToMany(() => Order, (order) => order.user)
   orders: Order[];
+
+  @OneToMany(() => Order, order => order.driver)
+  driverOrders: Order[];
 
   @OneToMany(() => Address, address => address.user)
   addresses: Address[];

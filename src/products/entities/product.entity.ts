@@ -18,11 +18,15 @@ export class Product {
   @Column({ nullable: true })
   description: string;
 
-  @Column('float')
+  @Column('decimal', { precision: 10, scale: 2 })
   price: number;
 
   @Column({ default: true })
   isActive: boolean;
+
+  @Column({ type: 'float', default: 0 })
+  rating: number;
+
 
   @ManyToOne(() => Restaurant, (restaurant) => restaurant.products, {
     onDelete: 'CASCADE',

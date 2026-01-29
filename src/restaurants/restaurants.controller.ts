@@ -12,6 +12,13 @@ import {
 import { RestaurantsService } from './restaurants.service';
 import { CreateRestaurantDto } from './dto/create-restaurant.dto';
 import { UpdateRestaurantDto } from './dto/update-restaurant.dto';
+import { UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
+import { UserRole } from '../users/user-role.enum';
+import { CurrentUser } from '../users/current-user.decorator';
+
 
 @Controller('restaurants')
 export class RestaurantsController {
@@ -19,9 +26,11 @@ export class RestaurantsController {
     private readonly restaurantsService: RestaurantsService,
   ) {}
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.VENDOR)
   @Post()
-  create(@Body() dto: CreateRestaurantDto) {
-    return this.restaurantsService.create(dto);
+  create(@Body() dto: CreateRestaurantDto,@CurrentUser() user: any,) {
+    return this.restaurantsService.create(dto,user.userId);
   }
 
   @Get()
